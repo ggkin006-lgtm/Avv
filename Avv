@@ -1,0 +1,182 @@
+-- โหลด UI Library
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/xHeptc/Kavo-UI-Library/main/source.lua"))()
+local Window = Library.CreateLib("GOMVR0", "Midnight")
+
+-- แท็บหลัก
+local MainTab = Window:NewTab("ฟังก์ชั่นหลัก")
+local MainSection = MainTab:NewSection("GOMVR0 Menu")
+
+-- ตัวแปรตั้งค่า
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local FlySpeed = 50
+local WalkSpeed = 16
+local IsFlying = false
+local Noclip = false
+local ESPEnabled = false
+local AutoHit = false
+local ExpandRange = false
+local HitRange = 500
+
+----------------------------------------------------------------
+-- 1. ระบบบิน (Fly Controls)
+----------------------------------------------------------------
+MainSection:NewToggle("1. บินได้ (Fly)", "เปิด/ปิด ระบบบิน", function(state)
+    IsFlying = state
+    local Char = LocalPlayer.Character
+    if not Char or not Char:FindFirstFound("HumanoidRootPart") then return end
+    
+    if IsFlying then
+        local HRP = Char.HumanoidRootPart
+        local BG = Instance.new("BodyGyro", HRP)
+        local BV = Instance.new("BodyVelocity", HRP)
+        BG.Name = "FlyBG"
+        BV.Name = "FlyBV"
+        BG.maxTorque = Vector3.new(9e9, 9e9, 9e9)
+        BG.P = 9e4
+        BV.maxForce = Vector3.new(9e9, 9e9, 9e9)
+        
+        task.spawn(function()
+            while IsFlying and Char and Char:FindFirstChild("HumanoidRootPart") do
+                local Camera = workspace.CurrentCamera
+                local Velocity = Vector3.new()
+                
+                if UserInputService:IsKeyDown(Enum.KeyCode.W) then Velocity = Velocity + Camera.CFrame.LookVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.S) then Velocity = Velocity - Camera.CFrame.LookVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.A) then Velocity = Velocity - Camera.CFrame.RightVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.D) then Velocity = Velocity + Camera.CFrame.RightVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.Space) then Velocity = Velocity + Vector3.new(0, 1, 0) end
+                if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then Velocity = Velocity - Vector3.new(0, 1, 0) end
+                
+                BV.Velocity = Velocity * FlySpeed
+                BG.CFrame = Camera.CFrame
+                RunService.RenderStepped:Wait()
+            end
+            if HRP:FindFirstChild("FlyBG") then HRP.FlyBG:Destroy() end
+            if HRP:FindFirstChild("FlyBV") then HRP.FlyBV:Destroy() end
+        end)
+    else
+        if Char.HumanoidRootPart:FindFirstChild("FlyBG") then Char.HumanoidRootPart.FlyBG:Destroy() end
+        if Char.HumanoidRootPart:FindFirstChild("FlyBV") then Char.HumanoidRootPart.FlyBV:Destroy() end
+    end
+end)
+
+MainSection:NewSlider("ปรับความเร็วบิน", "ปรับความเร็วการบิน", 300, 10, function(s)
+    FlySpeed = s
+end)
+
+----------------------------------------------------------------
+-- 2. วิ่งเร็ว (Speed)
+----------------------------------------------------------------
+MainSection:NewSlider("2. ปรับความเร็ววิ่ง", "ปรับความเร็วเดิน/วิ่ง", 300, 16, function(s)
+    WalkSpeed = s
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+        LocalPlayer.Character.Humanoid.WalkSpeed = WalkSpeed
+    end
+end)
+
+RunService.RenderStepped:Connect(function()
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+        if LocalPlayer.Character.Humanoid.WalkSpeed ~= WalkSpeed and WalkSpeed ~= 16 then
+            LocalPlayer.Character.Humanoid.WalkSpeed = WalkSpeed
+        end
+    end
+end)
+
+----------------------------------------------------------------
+-- 3. เดินทะลุ (Noclip)
+----------------------------------------------------------------
+MainSection:NewToggle("3. เดินทะลุสิ่งกีดขวาง (Noclip)", "เดินทะลุกำแพงทุกอย่าง", function(state)
+    Noclip = state
+end)
+
+RunService.Stepped:Connect(function()
+    if Noclip and LocalPlayer.Character then
+        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+            end
+        end
+    end
+end)
+
+----------------------------------------------------------------
+-- 4. มองทะลุผู้เล่น (ESP)
+----------------------------------------------------------------
+MainSection:NewToggle("4. มองทะลุผู้เล่น (ESP)", "เห็นตำแหน่งผู้เล่นทุกคน", function(state)
+    ESPEnabled = state
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            if ESPEnabled then
+                if not player.Character:FindFirstChild("GOMVR0_ESP") then
+                    local Highlight = Instance.new("Highlight")
+                    Highlight.Name = "GOMVR0_ESP"
+                    Highlight.FillColor = Color3.fromRGB(255, 0, 0)
+                    Highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+                    Highlight.Parent = player.Character
+                end
+            else
+                if player.Character:FindFirstChild("GOMVR0_ESP") then
+                    player.Character.GOMVR0_ESP:Destroy()
+                end
+            end
+        end
+    end
+end)
+
+----------------------------------------------------------------
+-- 5. ตีไกล & ตีเอง (Auto Hit)
+----------------------------------------------------------------
+MainSection:NewToggle("5. ตีเองอัตโนมัติ (Auto Hit)", "โจมตีศัตรูใกล้อัตโนมัติ", function(state)
+    AutoHit = state
+    task.spawn(function()
+        while AutoHit do
+            local Tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
+            if Tool then
+                Tool:Activate()
+            end
+            task.wait(0.1)
+        end
+    end)
+end)
+
+----------------------------------------------------------------
+-- 6. ขยายระยะการโจมตี 500 (Hitbox Expand)
+----------------------------------------------------------------
+MainSection:NewToggle("6. ขยายระยะตี 500 (Hitbox Expand)", "ขยายระยะโจมตีไปไกล 500 หน่วย", function(state)
+    ExpandRange = state
+    task.spawn(function()
+        while ExpandRange do
+            for _, player in pairs(Players:GetPlayers()) do
+                if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                    player.Character.HumanoidRootPart.Size = Vector3.new(HitRange, HitRange, HitRange)
+                    player.Character.HumanoidRootPart.Transparency = 0.7
+                    player.Character.HumanoidRootPart.CanCollide = false
+                end
+            end
+            task.wait(1)
+        end
+        -- คืนค่าเดิมเมื่อปิด
+        if not ExpandRange then
+            for _, player in pairs(Players:GetPlayers()) do
+                if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                    player.Character.HumanoidRootPart.Size = Vector3.new(2, 2, 1)
+                    player.Character.HumanoidRootPart.Transparency = 1
+                end
+            end
+        end
+    end)
+end)
+
+----------------------------------------------------------------
+-- ปุ่มซ่อน/เปิด เมนู UI
+----------------------------------------------------------------
+local ToggleTab = Window:NewTab("ตั้งค่าเมนู")
+local ToggleSection = ToggleTab:NewSection("Keybind")
+
+ToggleSection:NewKeybind("ปุ่มซ่อน/เปิด UI", "กดปุ่มเพื่อซ่อนหรือเปิดเมนู", Enum.KeyCode.RightControl, function()
+    Library:ToggleUI()
+end)
